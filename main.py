@@ -1,69 +1,63 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import altair as alt
 
-# -----------------------------
-# 데이터 불러오기
-# -----------------------------
-file_path = "data/202509_주민등록인구및세대현황_월간.csv"
+# 🔹 CSV 불러오기
+@st.cache_data
+def load_data():
+    df = pd.read_csv("202509_202509_주민등록인구및세대현황_월간.csv", encoding="cp949")
+    
+    # 숫자 컬럼에서 쉼표 제거하고 정수형 변환
+    for col in ["2025년09월_총인구수", "2025년09월_세대수", "2025년09월_남자 인구수", "2025년09월_여자 인구수"]:
+        df[col] = df[col].astype(str).str.replace(",", "").astype(int)
+    
+    # 행정구역명 정리 (괄호 제거)
+    df["행정구역"] = df["행정구역"].str.replace(r"\s*\(.*\)", "", regex=True)
+    
+    return df
 
-# ⚠️ 파일 인코딩 오류가 나면 encoding='utf-8-sig', 'cp949' 로 바꿔가며 시도
-df = pd.read_csv(file_path, encoding='cp949')
+df = load_data()
 
-st.title("📊 주민등록 인구 및 세대 현황 시각화")
+st.title("📊 2025년 9월 주민등록 인구 및 세대 현황 대시보드")
+st.write("데이터 출처: 행정안전부 주민등록 인구 통계")
 
-# -----------------------------
-# 데이터 확인
-# -----------------------------
-st.subheader("데이터 미리보기")
-st.dataframe(df.head())
+# 🔹 지역 선택 기능
+region = st.selectbox("지역을 선택하세요", df["행정구역"].unique())
+selected = df[df["행정구역"] == region]
 
-# -----------------------------
-# 컬럼 선택 (⚠️ 여기서 네 CSV 컬럼명에 맞게 수정!)
-# -----------------------------
-# 예시 컬럼 → "행정구역", "총인구수", "세대수", "남자", "여자"
-region_col = st.selectbox("지역(행정구역) 컬럼 선택", df.columns)
-population_col = st.selectbox("총 인구수 컬럼 선택", df.columns)
-household_col = st.selectbox("세대수 컬럼 선택", df.columns)
+st.subheader(f"✅ 선택한 지역: {region}")
+st.write(selected)
 
-# -----------------------------
-# 지역 선택 필터
-# -----------------------------
-regions = sorted(df[region_col].unique())
-selected_region = st.selectbox("지역 선택", regions)
-
-filtered_df = df[df[region_col] == selected_region]
-
-st.write(f"### 📍 선택한 지역: **{selected_region}**")
-st.write(filtered_df)
-
-# -----------------------------
-# 그래프 1: 지역별 총 인구 수
-# -----------------------------
-st.subheader("📈 지역별 총 인구 수 비교")
-
-pop_chart = px.bar(
-    df,
-    x=region_col,
-    y=population_col,
-    title="지역별 총 인구수 비교",
+# 🔹 전체 지역별 인구수 바 그래프
+st.subheader("📍 전체 지역 인구 비교")
+chart = (
+    alt.Chart(df)
+    .mark_bar()
+    .encode(
+        x=alt.X("행정구역:N", sort="-y"),
+        y="2025년09월_총인구수:Q",
+        tooltip=["행정구역", "2025년09월_총인구수"]
+    )
 )
-st.plotly_chart(pop_chart)
+st.altair_chart(chart, use_container_width=True)
 
-# -----------------------------
-# 그래프 2: 지역별 세대수
-# -----------------------------
-st.subheader("🏠 지역별 세대수 비교")
-
-house_chart = px.line(
-    df,
-    x=region_col,
-    y=household_col,
-    markers=True,
-    title="지역별 세대수 변화",
+# 🔹 성별 인구 비교 (선택지역)
+st.subheader("👫 선택 지역 성별 인구 비교")
+gender_df = selected.melt(
+    id_vars="행정구역",
+    value_vars=["2025년09월_남자 인구수", "2025년09월_여자 인구수"],
+    var_name="성별",
+    value_name="인구수"
 )
-st.plotly_chart(house_chart)
 
-st.write("✅ 시각화 완료! 원하는 그래프를 더 요청하면 추가해줄게 🙂")
-
-
+gender_chart = (
+    alt.Chart(gender_df)
+    .mark_bar()
+    .encode(
+        x="성별:N",
+        y="인구수:Q",
+        color="성별:N",
+        tooltip=["성별", "인구수"]
+    )
+)
+st.altair_chart(gender_chart, use_container_width=True)
